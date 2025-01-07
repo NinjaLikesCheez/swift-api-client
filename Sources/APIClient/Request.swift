@@ -1,6 +1,6 @@
 import Foundation
 
-public struct VoidResponse: Decodable {}
+public struct EmptyResponse: Decodable, Sendable {}
 
 public enum HTTPMethod: String {
 	case get = "GET"
@@ -20,31 +20,19 @@ public struct Request<Value: Decodable> {
 	public let headers: HTTPFields
 	public let body: [String: Any]?
 
+	public let transform: ((Data) throws -> Value)?
+
 	public init(
 		method: HTTPMethod,
 		path: String? = nil,
 		headers: HTTPFields = [:],
-		body: [String: Any]? = nil
+		body: [String: Any]? = nil,
+		transform: ((Data) throws -> Value)? = nil
 	) {
 		self.method = method
 		self.path = path
 		self.headers = headers
 		self.body = body
-	}
-}
-
-public extension Request where Value == VoidResponse {
-	init(
-		method: HTTPMethod,
-		path: String,
-		headers: HTTPFields = [:],
-		body: [String: Any]? = nil
-	) {
-		self.init(
-			method: method,
-			path: path,
-			headers: headers,
-			body: body
-		)
+		self.transform = transform
 	}
 }
