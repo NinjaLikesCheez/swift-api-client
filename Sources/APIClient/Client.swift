@@ -15,7 +15,12 @@ public typealias HTTPFields = [String: String]
 public extension Client {
 	enum RequestError: Swift.Error {
 		case urlError(URLError)
+		case invalidRequest(Swift.Error)
 		case unknown(Swift.Error)
+	}
+
+	enum EncodingError: Swift.Error {
+		case invalidUTF8
 	}
 
 	enum Error: Swift.Error {
@@ -69,18 +74,17 @@ extension Client {
 
 		var urlRequest = URLRequest(url: url)
 		urlRequest.httpMethod = request.method.rawValue
-		urlRequest.allHTTPHeaderFields = (defaultHeaders ?? [:]).merging(request.headers, uniquingKeysWith: { _, new in new })
+		urlRequest.allHTTPHeaderFields = (defaultHeaders ?? [:]).merging(request.allHeaders, uniquingKeysWith: { _, new in new })
 
 		do {
-			// TODO: this needs to be changed to only allow codable models...
-			if request.body?.isEmpty == false {
-				urlRequest.httpBody = try JSONSerialization.data(withJSONObject: request.body as Any, options: [])
+			if let body = request.body {
+				urlRequest.httpBody = try body.encode()
 			}
 		} catch {
 			throw .encoding(error)
 		}
 
-		return prepare(urlRequest)
+		return request.prepare(prepare(urlRequest))
 	}
 }
 
@@ -90,16 +94,18 @@ extension Client {
 		request: Request<Value>
 	) async throws(Error) -> Value {
 		do {
-			let (data, response) =  try await session.data(for: urlRequest(from: request))
+			let urlRequest = try urlRequest(from: request)
+			logger.debug("request: \(String(describing: urlRequest.httpBody))")
+			let (data, response) =  try await session.data(for: urlRequest)
 			let httpResponse = response as! HTTPURLResponse
 
 			logger.debug("response: \(httpResponse), data: \(String(decoding: data, as: UTF8.self))")
 
 			try validate(data, httpResponse)
 
-			let transform = request.transform ?? decode(data:)
+			let transform = request.transform ?? decode
 
-			return try transform(data)
+			return try transform(data, httpResponse)
 		} catch let error as Error {
 			throw error
 		} catch let error as URLError {
@@ -109,9 +115,28 @@ extension Client {
 		}
 	}
 
-	private func decode<Value: Decodable>(data: Data) throws(Error) -> Value {
+	private func decode<Value: Decodable>(data: Data, _ : URLResponse) throws(Error) -> Value {
 		do {
-			return try JSONDecoder().decode(Value.self, from: data)
+//			var debugText: String = ""
+
+//			do {
+//					return try decoder.decode(Value.self, from: data)
+//			} catch DecodingError.dataCorrupted(let context) {
+//					debugText = "\(context)"
+//			} catch DecodingError.keyNotFound(let key, let context) {
+//					debugText += "\nKey '\(key)' not found:\(context.debugDescription)."
+//					debugText += "\ncodingPath: \(context.codingPath)."
+//			} catch DecodingError.valueNotFound (let value, let context) {
+//					debugText += "\nValue '\(value)' not found: \(context.debugDescription)."
+//					debugText += "\ncodingPath: \(context.codingPath)."
+//			} catch DecodingError.typeMismatch(let type, let context) {
+//					debugText += "\nType '\(type)' mismatch: \(context.debugDescription)."
+//					debugText += "\ncodingPath: \(context.codingPath)."
+//			} catch {
+//					debugText = error.localizedDescription
+//			}
+//			print("debugText: \(debugText)")
+			return try decoder.decode(Value.self, from: data)
 		} catch {
 			throw .decoding(error)
 		}
@@ -147,10 +172,10 @@ extension Client {
 								.eraseToAnyPublisher()
 						}
 
-						let transform = request.transform ?? decode(data:)
+						let transform = request.transform ?? decode
 
 						do {
-							let value = try transform(data)
+							let value = try transform(data, httpResponse)
 
 							return Just(value)
 								.setFailureType(to: Error.self)
