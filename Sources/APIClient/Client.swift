@@ -95,11 +95,11 @@ extension Client {
 	) async throws(Error) -> Value {
 		do {
 			let urlRequest = try urlRequest(from: request)
-			logger.debug("request: \(String(describing: urlRequest.httpBody))")
+			logger.debug("request: \(String(describing: request.body))")
 			let (data, response) =  try await session.data(for: urlRequest)
 			let httpResponse = response as! HTTPURLResponse
 
-			logger.debug("response: \(httpResponse), data: \(String(decoding: data, as: UTF8.self))")
+			logger.debug("response: \(httpResponse), data: \(String(bytes: data, encoding: .utf8) ?? "nil")")
 
 			try validate(data, httpResponse)
 
@@ -115,7 +115,7 @@ extension Client {
 		}
 	}
 
-	private func decode<Value: Decodable>(data: Data, _ : URLResponse) throws(Error) -> Value {
+	private func decode<Value: Decodable>(data: Data, _: URLResponse) throws(Error) -> Value {
 		do {
 //			var debugText: String = ""
 

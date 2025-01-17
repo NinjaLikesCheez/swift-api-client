@@ -1,7 +1,7 @@
 import Foundation
 
 // Entirely inspired by https://davedelong.com/blog/2020/06/30/http-in-swift-part-3-request-bodies/ - thanks Dave!
-public protocol RequestBody {
+public protocol RequestBody: CustomStringConvertible {
 	func encode() throws -> Data
 	var headers: HTTPFields { get }
 	var isEmpty: Bool { get }
@@ -16,6 +16,7 @@ public struct EmptyBody: RequestBody {
 		public let isEmpty = true
 		public init() { }
 		public func encode() throws -> Data { Data() }
+		public var description: String { "EmptyBody()" }
 }
 
 public struct DataBody: RequestBody {
@@ -31,6 +32,8 @@ public struct DataBody: RequestBody {
 	public func encode() throws -> Data {
 		data
 	}
+
+	public var description: String { "DataBody(\(String(bytes: data, encoding: .utf8) ?? "undecodable"))" }
 }
 
 public struct JSONBody<Value: Encodable>: RequestBody {
@@ -52,6 +55,8 @@ public struct JSONBody<Value: Encodable>: RequestBody {
 	public func encode() throws -> Data {
 		try encoder.encode(value)
 	}
+
+	public var description: String { "JSONBody(\(String(describing: value)))" }
 }
 
 public struct FormBody: RequestBody {
@@ -86,6 +91,8 @@ public struct FormBody: RequestBody {
 		let allowedCharacters = CharacterSet.alphanumerics
 		return string.addingPercentEncoding(withAllowedCharacters: allowedCharacters) ?? ""
 	}
+
+	public var description: String { "FormBody(\(values.map(urlEncode).joined(separator: "&")))" }
 }
 
 // Inspired by https://theswiftdev.com/easy-multipart-file-upload-for-swift/ - thanks Tibor!
@@ -107,7 +114,7 @@ public struct MultipartFormBody: RequestBody {
 		self.headers = ["Content-Type": "multipart/form-data; boundary=\(boundary)"]
 	}
 
-	public func encode() throws -> Data {
+	private func encodeValues() throws -> Data {
 		var data = try values
 			.map { value in
 				switch value {
@@ -128,11 +135,13 @@ public struct MultipartFormBody: RequestBody {
 			}
 			.reduce(into: Data(), { $0.append($1)})
 
-		data.append(Data("--\(boundary)--".utf8))
+			data.append(Data("--\(boundary)--".utf8))
 
-		print("Multipart data: \(String(decoding: data, as: UTF8.self))")
+			return data
+	}
 
-		return data
+	public func encode() throws -> Data {
+		try encodeValues()
 	}
 
 	private func disposition(for key: String) -> String {
@@ -141,5 +150,13 @@ public struct MultipartFormBody: RequestBody {
 
 	private var boundarySeparator: String {
 		"--\(boundary)\(separator)"
+	}
+
+	public var description: String {
+		guard let data = try? encodeValues() else {
+			return "MultipartFormBody(undecodable)"
+		}
+
+		return "MultipartFormBody(\(String(data: data, encoding: .utf8) ?? "undecodable"))"
 	}
 }
