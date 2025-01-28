@@ -2,12 +2,12 @@ import Foundation
 import Logging
 
 #if canImport(Combine)
-		import Combine
+import Combine
 #endif
 
 // URLSession in exists in FoundationNetworking on Linux
 #if canImport(FoundationNetworking)
-		import FoundationNetworking
+import FoundationNetworking
 #endif
 
 public typealias HTTPFields = [String: String]
@@ -59,13 +59,13 @@ public struct Client<ResponseError: Swift.Error>: Sendable {
 	}
 
 	@discardableResult
-	public func request<Value>(_ request: Request<Value>) async throws(Error) -> Value {
+	public func request<R: Request>(_ request: R) async throws(Error) -> R.Response {
 		try await send(request: request)
 	}
 }
 
 extension Client {
-	private func urlRequest<Value>(from request: Request<Value>) throws(Error) -> URLRequest {
+	private func urlRequest(from request: some Request) throws(Error) -> URLRequest {
 		var url = baseURL
 
 		if let path = request.path, !path.isEmpty {
@@ -90,9 +90,9 @@ extension Client {
 
 // Swift Concurrency
 extension Client {
-	private func send<Value>(
-		request: Request<Value>
-	) async throws(Error) -> Value {
+	private func send<R: Request>(
+		request: R
+	) async throws(Error) -> R.Response {
 		do {
 			let urlRequest = try urlRequest(from: request)
 			logger.debug("request: \(String(describing: request.body))")
@@ -117,25 +117,25 @@ extension Client {
 
 	private func decode<Value: Decodable>(data: Data, _: URLResponse) throws(Error) -> Value {
 		do {
-//			var debugText: String = ""
+			//			var debugText: String = ""
 
-//			do {
-//					return try decoder.decode(Value.self, from: data)
-//			} catch DecodingError.dataCorrupted(let context) {
-//					debugText = "\(context)"
-//			} catch DecodingError.keyNotFound(let key, let context) {
-//					debugText += "\nKey '\(key)' not found:\(context.debugDescription)."
-//					debugText += "\ncodingPath: \(context.codingPath)."
-//			} catch DecodingError.valueNotFound (let value, let context) {
-//					debugText += "\nValue '\(value)' not found: \(context.debugDescription)."
-//					debugText += "\ncodingPath: \(context.codingPath)."
-//			} catch DecodingError.typeMismatch(let type, let context) {
-//					debugText += "\nType '\(type)' mismatch: \(context.debugDescription)."
-//					debugText += "\ncodingPath: \(context.codingPath)."
-//			} catch {
-//					debugText = error.localizedDescription
-//			}
-//			print("debugText: \(debugText)")
+			//			do {
+			//					return try decoder.decode(Value.self, from: data)
+			//			} catch DecodingError.dataCorrupted(let context) {
+			//					debugText = "\(context)"
+			//			} catch DecodingError.keyNotFound(let key, let context) {
+			//					debugText += "\nKey '\(key)' not found:\(context.debugDescription)."
+			//					debugText += "\ncodingPath: \(context.codingPath)."
+			//			} catch DecodingError.valueNotFound (let value, let context) {
+			//					debugText += "\nValue '\(value)' not found: \(context.debugDescription)."
+			//					debugText += "\ncodingPath: \(context.codingPath)."
+			//			} catch DecodingError.typeMismatch(let type, let context) {
+			//					debugText += "\nType '\(type)' mismatch: \(context.debugDescription)."
+			//					debugText += "\ncodingPath: \(context.codingPath)."
+			//			} catch {
+			//					debugText = error.localizedDescription
+			//			}
+			//			print("debugText: \(debugText)")
 			return try decoder.decode(Value.self, from: data)
 		} catch {
 			throw .decoding(error)
@@ -145,53 +145,53 @@ extension Client {
 
 // Combine
 #if canImport(Combine)
-	public extension Client {
-		/// Sends a request to the server.
-		/// - Parameter request: The request to be sent to the server.
-		/// - Returns: A publisher that emits a value when the request completes.
-		func request<Value>(_ request: Request<Value>, retryOnAuthenticationFailure: Bool = true) -> AnyPublisher<Value, Error> {
-			send(request: request)
-				.eraseToAnyPublisher()
-		}
+public extension Client {
+	/// Sends a request to the server.
+	/// - Parameter request: The request to be sent to the server.
+	/// - Returns: A publisher that emits a value when the request completes.
+	func request<R: Request>(_ request: R, retryOnAuthenticationFailure: Bool = true) -> AnyPublisher<R.Response, Error> {
+		send(request: request)
+			.eraseToAnyPublisher()
 	}
+}
 
-	extension Client {
-		private func send<Value>(request: Request<Value>, retryOnAuthenticationFailure: Bool = true) -> AnyPublisher<Value, Error> {
-			do {
-				return session.dataTaskPublisher(for: try urlRequest(from: request))
-					.mapError { Client.Error.request(.urlError($0)) }
-					.flatMap { [self] data, response -> AnyPublisher<Value, Error> in
-						let httpResponse = response as! HTTPURLResponse
+extension Client {
+	private func send<R: Request>(request: R, retryOnAuthenticationFailure: Bool = true) -> AnyPublisher<R.Response, Error> {
+		do {
+			return session.dataTaskPublisher(for: try urlRequest(from: request))
+				.mapError { Client.Error.request(.urlError($0)) }
+				.flatMap { [self] data, response -> AnyPublisher<R.Response, Error> in
+					let httpResponse = response as! HTTPURLResponse
 
-						logger.debug("response: \(httpResponse), data: \(String(decoding: data, as: UTF8.self))")
+					logger.debug("response: \(httpResponse), data: \(String(decoding: data, as: UTF8.self))")
 
-						do {
-							try validate(data, httpResponse)
-						} catch {
-							return Fail(error: error as! Client.Error)
-								.eraseToAnyPublisher()
-						}
-
-						let transform = request.transform ?? decode
-
-						do {
-							let value = try transform(data, httpResponse)
-
-							return Just(value)
-								.setFailureType(to: Error.self)
-								.eraseToAnyPublisher()
-						} catch let error as Error {
-							return Fail(error: error)
-								.eraseToAnyPublisher()
-						} catch {
-							return Fail(error: .request(.unknown(error)))
-								.eraseToAnyPublisher()
-						}
+					do {
+						try validate(data, httpResponse)
+					} catch {
+						return Fail(error: error as! Client.Error)
+							.eraseToAnyPublisher()
 					}
-					.eraseToAnyPublisher()
-			} catch {
-				return Fail(error: error).eraseToAnyPublisher()
-			}
+
+					let transform = request.transform ?? decode
+
+					do {
+						let value = try transform(data, httpResponse)
+
+						return Just(value)
+							.setFailureType(to: Error.self)
+							.eraseToAnyPublisher()
+					} catch let error as Error {
+						return Fail(error: error)
+							.eraseToAnyPublisher()
+					} catch {
+						return Fail(error: .request(.unknown(error)))
+							.eraseToAnyPublisher()
+					}
+				}
+				.eraseToAnyPublisher()
+		} catch {
+			return Fail(error: error).eraseToAnyPublisher()
 		}
 	}
+}
 #endif
