@@ -9,15 +9,6 @@ public protocol Request {
     var body: RequestBody? { get }
     var prepare: ((URLRequest) -> URLRequest) { get }
     var transform: ((Data, HTTPURLResponse) throws -> Response)? { get }
-
-    init(
-        method: HTTPMethod,
-        path: String?,
-        headers: HTTPFields,
-        body: RequestBody?,
-        prepare: ((URLRequest) -> URLRequest)?,
-        transform: ((Data, HTTPURLResponse) throws -> Response)?
-    )
 }
 
 public extension Request {
