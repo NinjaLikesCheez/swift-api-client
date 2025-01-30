@@ -6,15 +6,9 @@ public protocol Request {
     var method: HTTPMethod { get }
     var path: String? { get }
     var headers: HTTPFields { get }
-    var body: RequestBody? { get }
+    var body: () throws -> RequestBody? { get }
     var prepare: ((URLRequest) -> URLRequest) { get }
     var transform: ((Data, HTTPURLResponse) throws -> Response)? { get }
-}
-
-public extension Request {
-    var allHeaders: HTTPFields {
-        headers.merging(body?.headers ?? [:], uniquingKeysWith: { _, new in new })
-    }
 }
 
 public struct EmptyResponse: Decodable, Sendable {

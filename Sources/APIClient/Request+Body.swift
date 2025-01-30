@@ -121,7 +121,7 @@ public struct MultipartFormBody: RequestBody {
 				case let .name(key, value):
 					return Data("\(boundarySeparator)\(disposition(for: key))\(separator)\(separator)\(value)\(separator)".utf8)
 				case let .filename(key, filename, value, contentType):
-					var result = "\(boundarySeparator)\(disposition(for: key)); filename=\"\(filename)\"\(separator)Content-Type: \(contentType)\(separator)\(separator)"
+					let result = "\(boundarySeparator)\(disposition(for: key)); filename=\"\(filename)\"\(separator)Content-Type: \(contentType)\(separator)\(separator)"
 
 					guard var data = result.data(using: .utf8) else {
 						throw EncodingError.invalidValue(result, .init(codingPath: [], debugDescription: "Invalid UTF8 encoding in: \(result)"))

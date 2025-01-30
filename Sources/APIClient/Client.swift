@@ -74,11 +74,12 @@ extension Client {
 
 		var urlRequest = URLRequest(url: url)
 		urlRequest.httpMethod = request.method.rawValue
-		urlRequest.allHTTPHeaderFields = (defaultHeaders ?? [:]).merging(request.allHeaders, uniquingKeysWith: { _, new in new })
+		urlRequest.allHTTPHeaderFields = (defaultHeaders ?? [:]).merging(request.headers) { _, new in new }
 
 		do {
-			if let body = request.body {
+			if let body = try request.body() {
 				urlRequest.httpBody = try body.encode()
+				urlRequest.allHTTPHeaderFields?.merge(body.headers) { _, new in new }
 			}
 		} catch {
 			throw .encoding(error)
