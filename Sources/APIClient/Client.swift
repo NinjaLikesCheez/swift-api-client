@@ -34,11 +34,21 @@ public protocol Client: Sendable {
     var baseURL: URL { get }
     var defaultHeaders: HTTPFields? { get }
     var decoder: JSONDecoder { get }
+		var basicAuthentication: BasicAuthentication? { get }
 
     var validate: @Sendable (Data, HTTPURLResponse) throws(ClientError<ResponseError>) -> Void { get }
     var prepare: @Sendable (URLRequest) -> URLRequest { get }
 
 		var session: URLSession { get }
+}
+
+public struct BasicAuthentication: Sendable {
+	let username: String
+	let password: String
+
+	var encoded: String {
+		Data("\(username):\(password)".utf8).base64EncodedString()
+	}
 }
 
 extension Client {
@@ -51,7 +61,12 @@ extension Client {
 
 		var urlRequest = URLRequest(url: url)
 		urlRequest.httpMethod = request.method.rawValue
-		urlRequest.allHTTPHeaderFields = (defaultHeaders ?? [:]).merging(request.headers) { _, new in new }
+
+		var headers = (defaultHeaders ?? [:]).merging(request.headers) { _, new in new }
+		if let basicAuthentication = basicAuthentication {
+			headers["Authorization"] = "Basic \(basicAuthentication.encoded)"
+		}
+		urlRequest.allHTTPHeaderFields = headers
 
 		do {
 			if let body = try request.body() {
@@ -76,6 +91,7 @@ extension Client {
 			let urlRequest = try urlRequest(from: request)
 			logger.debug("request: \(String(describing: request.body))")
 			let (data, response) =  try await session.data(for: urlRequest)
+			// swiftlint:disable:next force_cast
 			let httpResponse = response as! HTTPURLResponse
 
 			logger.debug("response: \(httpResponse), data: \(String(bytes: data, encoding: .utf8) ?? "nil")")
@@ -115,14 +131,15 @@ public extension Client {
 			return session.dataTaskPublisher(for: try urlRequest(from: request))
 				.mapError { ClientError<ResponseError>.request(.urlError($0)) }
 				.flatMap { [self] data, response -> AnyPublisher<R.Response, ClientError<ResponseError>> in
+					// swiftlint:disable:next force_cast
 					let httpResponse = response as! HTTPURLResponse
 
-					logger.debug("response: \(httpResponse), data: \(String(decoding: data, as: UTF8.self))")
+					logger.debug("response: \(httpResponse), data: \(String(data: data, encoding: .utf8) ?? "nil")")
 
-					do {
+					do throws(ClientError<ResponseError>) {
 						try validate(data, httpResponse)
 					} catch {
-						return Fail(error: error as! ClientError<ResponseError>)
+						return Fail(error: error)
 							.eraseToAnyPublisher()
 					}
 
