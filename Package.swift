@@ -21,7 +21,7 @@ let package = Package(
 		.executable(name: "api-client", targets: ["api-client"])
 	],
 	dependencies: [
-		.package(url: "https://github.com/apple/swift-log.git", from: "1.0.0")
+		.package(url: "https://github.com/apple/swift-log", from: "1.0.0")
 	],
 	targets: [
 		// Targets are the basic building blocks of a package, defining a module or a test suite.
