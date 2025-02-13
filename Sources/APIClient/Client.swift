@@ -42,7 +42,7 @@ public protocol Client: Sendable {
 		var session: URLSession { get }
 }
 
-public struct BasicAuthentication: Codable, Sendable {
+public struct BasicAuthentication: Codable, Equatable, Sendable {
 	public let username: String
 	public let password: String
 
