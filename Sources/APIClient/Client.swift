@@ -42,9 +42,14 @@ public protocol Client: Sendable {
 		var session: URLSession { get }
 }
 
-public struct BasicAuthentication: Sendable {
-	let username: String
-	let password: String
+public struct BasicAuthentication: Codable, Sendable {
+	public let username: String
+	public let password: String
+
+	public init(username: String, password: String) {
+		self.username = username
+		self.password = password
+	}
 
 	var encoded: String {
 		Data("\(username):\(password)".utf8).base64EncodedString()
